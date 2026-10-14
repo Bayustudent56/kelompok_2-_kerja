@@ -25,11 +25,11 @@ st.markdown("Aplikasi web interaktif untuk menampilkan hasil analisis sentimen, 
 # -------------------------------------------------------------------
 # SIDEBAR - UNGGAH CSV HASIL COLAB
 # -------------------------------------------------------------------
-st.sidebar.header("📂 Unggah Data")
+st.sidebar.header(" Unggah Data")
 uploaded_file = st.sidebar.file_uploader("Unggah CSV Dataset Hasil Colab", type=["csv"])
 
 if uploaded_file is None:
-    st.info("👋 **Selamat Datang!** Silakan unggah file CSV hasil pemrosesan Google Colab (`hasil_sentimen_lengkap.csv`) melalui panel di sebelah kiri (Sidebar) untuk menampilkan dashboard.")
+    st.info(" **Selamat Datang!** Silakan unggah file CSV hasil pemrosesan Google Colab (`hasil_sentimen_lengkap.csv`) melalui panel di sebelah kiri (Sidebar) untuk menampilkan dashboard.")
     st.stop()
 
 try:
@@ -87,12 +87,12 @@ if not missing_core:
 # -------------------------------------------------------------------
 # TAB APLIKASI
 # -------------------------------------------------------------------
-tab1, tab2, tab3, tab4 = st.tabs(["📁 Data", "😃 Sentimen", "🏷️ Clustering", "📈 Regresi"])
+tab1, tab2, tab3, tab4 = st.tabs([" Data", " Sentimen", " Clustering", " Regresi"])
 
 # ===================================================================
 # TAB 1: DATA
 with tab1:
-    st.header("📁 Pratinjau & Ringkasan Dataset")
+    st.header(" Pratinjau & Ringkasan Dataset")
     
     missing_all = [col for col in kolom_colab if col not in df.columns]
     
@@ -188,21 +188,8 @@ with tab2:
         except Exception as e:
             st.error(f"❌ Gagal membaca file yang di-upload: {e}")
             
-    # 2. Jika belum di-upload, cek apakah ada file bawaan lokal di folder dataset/
-    else:
-        for path_lokal in [
-            "dataset/hasil_komparasi_sentimen.xlsx",
-            "dataset/hasil_komparasi_sentimen (2) (1).xlsx",
-            "dataset/evaluasi_sentimen_manual.xlsx"
-        ]:
-            try:
-                df_eval = pd.read_excel(path_lokal)
-                st.info(f"ℹ️ Menggunakan file bawaan lokal: **{path_lokal}**")
-                break
-            except Exception:
-                pass
 
-    # 3. Tampilkan data HANYA JIKA df_eval berhasil dimuat (dari upload atau file lokal)
+    # 2. Tampilkan data HANYA JIKA df_eval berhasil dimuat (dari upload atau file lokal)
     kolom_wajib = ['id', 'text', 'label_manual', 'sentimen_sistem', 'skor']
     
     if df_eval is not None:
@@ -227,13 +214,11 @@ with tab2:
             )
         else:
             st.warning(f"⚠️ Kolom pada file tidak lengkap. Pastikan file memiliki kolom: {', '.join(kolom_wajib)}")
-    else:
-        # Jika belum ada file yang di-upload dan tidak ada file lokal, tampilkan pesan panduan
-        st.info("👆 Silakan upload file hasil komparasi sentimen (.xlsx / .csv) di atas untuk melihat ringkasan pemeriksaan manual dan metrik kesesuaian.")
+    
 
 # TAB 3: CLUSTERING (MENAMPILKAN HASIL CLUSTER)
 with tab3:
-    st.header("🏷️ Hasil Clustering Data Teks (K-Means)")
+    st.header(" Hasil Clustering Data Teks (K-Means)")
     
     tema_map = {
         0: "Diskusi Gaji UMR, Keluhan Pekerja, dan Biaya Hidup",
@@ -271,7 +256,7 @@ with tab3:
 # ===================================================================
 # TAB 4: REGRESI (EVALUASI & FORMULIR INTERAKTIF)
 with tab4:
-    st.header("📈 Regresi Linear (Estimasi Jumlah Likes)")
+    st.header(" Regresi Linear (Estimasi Jumlah Likes)")
     
     # 1. Konversi tipe data ke numerik (Target y + Fitur X)
     df['like_count_num'] = pd.to_numeric(df['like_count'], errors='coerce')
