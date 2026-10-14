@@ -126,7 +126,7 @@ if missing_core:
 # ===================================================================
 # TAB 2: SENTIMEN (MENAMPILKAN HASIL SENTIMEN COLAB)
 with tab2:
-    st.header("😃 Hasil Analisis Sentimen")
+    st.header(" Hasil Analisis Sentimen")
     
     sentiment_counts = df['sentimen_sistem'].value_counts()
     sentiment_percent = (df['sentimen_sistem'].value_counts(normalize=True) * 100).round(2)
@@ -170,7 +170,7 @@ with tab2:
     
     # Fitur Upload File Excel (.xlsx) atau CSV (.csv)
     uploaded_eval = st.file_uploader(
-        "📂 Upload file Hasil Komparasi Sentimen (.xlsx / .csv):", 
+        "Upload file Hasil Komparasi Sentimen (.xlsx / .csv):", 
         type=["xlsx", "xls", "csv"], 
         key="upload_eval_komparasi"
     )
