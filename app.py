@@ -166,21 +166,56 @@ with tab2:
     )
     
     st.markdown("---")
-    st.subheader("🔍 Ringkasan Pemeriksaan Manual (20 Sampel Acak)")
+    st.subheader("🔍 Ringkasan Pemeriksaan Manual")
     
-    df_eval = df[['id', 'text', 'Cleaned_Text', 'sentimen_sistem', 'skor']].sample(n=min(20, len(df)), random_state=42).copy()
+    # Fitur Upload File Excel (.xlsx) atau CSV (.csv)
+    uploaded_eval = st.file_uploader(
+        "📂 Upload file Hasil Komparasi Sentimen (.xlsx / .csv):", 
+        type=["xlsx", "xls", "csv"], 
+        key="upload_eval_komparasi"
+    )
     
-    label_kelompok = [
-        'Positif', 'Negatif', 'Netral', 'Positif', 'Negatif',
-        'Netral', 'Netral', 'Netral', 'Negatif', 'Negatif',
-        'Netral', 'Positif', 'Positif', 'Netral', 'Negatif',
-        'Negatif', 'Netral', 'Negatif', 'Negatif', 'Negatif'
-    ]
-    df_eval['label_manual'] = label_kelompok[:len(df_eval)]
-    df_eval['Status'] = np.where(df_eval['label_manual'] == df_eval['sentimen_sistem'], '✅ Sesuai', '❌ Tidak Sesuai')
+    df_eval = None
     
+    # 1. Jika ada file yang di-upload, baca langsung dari file upload
+    if uploaded_eval is not None:
+        if uploaded_eval.name.endswith('.csv'):
+            df_eval = pd.read_csv(uploaded_eval)
+        else:
+            df_eval = pd.read_excel(uploaded_eval)
+        st.success(f"✅ Menampilkan data dari file upload: **{uploaded_eval.name}**")
+    else:
+        # 2. Jika belum upload, coba cari file bawaan di folder dataset/
+        for path_lokal in [
+            "dataset/hasil_komparasi_sentimen.xlsx",
+            "dataset/hasil_komparasi_sentimen (2) (1).xlsx",
+            "dataset/evaluasi_sentimen_manual.xlsx"
+        ]:
+            try:
+                df_eval = pd.read_excel(path_lokal)
+                break
+            except Exception:
+                pass
+                
+    # 3. Jika file upload / lokal belum ada atau format kolomnya belum lengkap, gunakan fallback 20 sampel awal
+    kolom_wajib = ['id', 'text', 'label_manual', 'sentimen_sistem', 'skor']
+    if df_eval is None or not all(kol in df_eval.columns for kol in kolom_wajib):
+        df_eval = df[['id', 'text', 'Cleaned_Text', 'sentimen_sistem', 'skor']].sample(n=min(20, len(df)), random_state=42).copy()
+        label_kelompok = [
+            'Positif', 'Negatif', 'Netral', 'Positif', 'Negatif',
+            'Netral', 'Netral', 'Netral', 'Negatif', 'Negatif',
+            'Netral', 'Positif', 'Positif', 'Netral', 'Negatif',
+            'Negatif', 'Netral', 'Negatif', 'Negatif', 'Negatif'
+        ]
+        df_eval['label_manual'] = label_kelompok[:len(df_eval)]
+    
+    # Pastikan kolom Status terisi dan akurat
+    if 'Status' not in df_eval.columns:
+        df_eval['Status'] = np.where(df_eval['label_manual'] == df_eval['sentimen_sistem'], '✅ Sesuai', '❌ Tidak Sesuai')
+    
+    # Hitung metrik kesesuaian berdasarkan isi tabel
     sesuai = (df_eval['label_manual'] == df_eval['sentimen_sistem']).sum()
-    acc = (sesuai / len(df_eval)) * 100
+    acc = (sesuai / len(df_eval)) * 100 if len(df_eval) > 0 else 0
     
     col_e1, col_e2 = st.columns(2)
     col_e1.metric("Jumlah Sesuai", f"{sesuai} dari {len(df_eval)} sampel")
@@ -188,9 +223,9 @@ with tab2:
     
     st.dataframe(
         df_eval[['id', 'text', 'label_manual', 'sentimen_sistem', 'skor', 'Status']],
-        use_container_width=True
+        use_container_width=True,
+        hide_index=True
     )
-    
 # TAB 3: CLUSTERING (MENAMPILKAN HASIL CLUSTER)
 with tab3:
     st.header("🏷️ Hasil Clustering Data Teks (K-Means)")
