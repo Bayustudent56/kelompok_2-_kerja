@@ -26,10 +26,10 @@ st.markdown("Aplikasi web interaktif untuk menampilkan hasil analisis sentimen, 
 # SIDEBAR - UNGGAH CSV HASIL COLAB
 # -------------------------------------------------------------------
 st.sidebar.header("📂 Unggah Data")
-uploaded_file = st.sidebar.file_uploader("Unggah CSV Dataset", type=["csv"])
+uploaded_file = st.sidebar.file_uploader("Unggah CSV Dataset Hasil Colab", type=["csv"])
 
 if uploaded_file is None:
-    st.info("👋 **Selamat Datang!** Silakan unggah file CSV hasil pemrosesan Google Colab Anda melalui panel di sebelah kiri (Sidebar) untuk menampilkan dashboard.")
+    st.info("👋 **Selamat Datang!** Silakan unggah file CSV hasil pemrosesan Google Colab (`hasil_sentimen_lengkap.csv`) melalui panel di sebelah kiri (Sidebar) untuk menampilkan dashboard.")
     st.stop()
 
 try:
@@ -39,29 +39,35 @@ except Exception as e:
     st.stop()
 
 # -------------------------------------------------------------------
-# PEMERIKSAAN KOLOM WAJIB
+# PEMERIKSAAN KOLOM SESUAI FORMAT CSV COLAB
 # -------------------------------------------------------------------
-kolom_wajib = ['created_at', 'text', 'Cleaned_Text', 'like_count']
-missing_cols = [col for col in kolom_wajib if col not in df.columns]
+kolom_colab = [
+    'id', 'created_at', 'text', 'Cleaned_Text', 
+    'like_count', 'retweet_count', 'reply_count', 
+    'is_relevant', 'sentimen_sistem', 'skor'
+]
+kolom_wajib_inti = ['created_at', 'text', 'Cleaned_Text', 'like_count']
+missing_core = [col for col in kolom_wajib_inti if col not in df.columns]
 
-# -------------------------------------------------------------------
-# PENGECEKAN OTOMATIS KOLOM HASIL COLAB (TANPA INDOBERT/TRANSFORMERS)
-# Jika CSV yang diupload sudah ada kolom dari Colab, langsung tampilkan!
-# Jika belum ada, buat dengan cepat agar aplikasi tidak pernah error.
-# -------------------------------------------------------------------
-if not missing_cols:
-    # 1. Cek kolom sentimen
-    if 'sentiment' not in df.columns:
-        pos_words = set(['gaji', 'bagus', 'lulus', 'alhamdulillah', 'peluang', 'tertarik', 'semangat', 'bismillah', 'gratis', 'info', 'sesuai', 'rekomendasi', 'terbaru', 'welcome', 'mampu', 'naik', 'berkah', 'sukses', 'terbuka'])
-        neg_words = set(['sedih', 'scam', 'sulit', 'turun', 'sakit', 'ngos', 'burnout', 'layoff', 'phk', 'overwork', 'pengangguran', 'susah', 'minimal', 'rugi', 'kecewa', 'revisi', 'menyedihkan', 'sulitnya', 'beban', 'keluhan'])
-        def get_sentiment(text_val):
-            words = str(text_val).lower().split()
-            pos = sum(1 for w in words if w in pos_words)
-            neg = sum(1 for w in words if w in neg_words)
-            return 'Positif' if pos > neg else ('Negatif' if neg > pos else 'Netral')
-        df['sentiment'] = df['Cleaned_Text'].fillna('').apply(get_sentiment)
+if not missing_core:
+    # 1. Gunakan 'sentimen_sistem' dari Colab jika tersedia
+    if 'sentimen_sistem' not in df.columns:
+        if 'sentiment' in df.columns:
+            df['sentimen_sistem'] = df['sentiment']
+        else:
+            pos_words = set(['gaji', 'bagus', 'lulus', 'alhamdulillah', 'peluang', 'tertarik', 'semangat', 'bismillah', 'gratis', 'info', 'sesuai', 'rekomendasi', 'terbaru', 'welcome', 'mampu', 'naik', 'berkah', 'sukses', 'terbuka'])
+            neg_words = set(['sedih', 'scam', 'sulit', 'turun', 'sakit', 'ngos', 'burnout', 'layoff', 'phk', 'overwork', 'pengangguran', 'susah', 'minimal', 'rugi', 'kecewa', 'revisi', 'menyedihkan', 'sulitnya', 'beban', 'keluhan'])
+            def get_sentiment(text_val):
+                words = str(text_val).lower().split()
+                pos = sum(1 for w in words if w in pos_words)
+                neg = sum(1 for w in words if w in neg_words)
+                return 'Positif' if pos > neg else ('Negatif' if neg > pos else 'Netral')
+            df['sentimen_sistem'] = df['Cleaned_Text'].fillna('').apply(get_sentiment)
 
-    # 2. Cek kolom cluster & kata dominan
+    if 'skor' not in df.columns:
+        df['skor'] = np.nan
+
+    # 2. Cek kolom cluster & kata dominan (sama persis dengan parameter Colab)
     if 'cluster' not in df.columns or 'cluster_top_words' not in df.columns:
         vectorizer = TfidfVectorizer(max_features=5000, ngram_range=(1, 2))
         X_tfidf = vectorizer.fit_transform(df['Cleaned_Text'].fillna('').astype(str))
@@ -89,40 +95,43 @@ tab1, tab2, tab3, tab4 = st.tabs(["📁 Data", "😃 Sentimen", "🏷️ Cluster
 with tab1:
     st.header("📁 Pratinjau & Ringkasan Dataset")
     
+    missing_all = [col for col in kolom_colab if col not in df.columns]
+    
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Postingan", f"{len(df)} baris")
-    col2.metric("Jumlah Kolom", f"{len(df.columns)} kolom")
-    col3.metric("Status Kolom Wajib", "Lengkap ✅" if not missing_cols else "Tidak Lengkap ❌")
+    col2.metric("Jumlah Kolom Asli", f"{len([c for c in kolom_colab if c in df.columns])} / {len(kolom_colab)} kolom")
+    col3.metric("Status Kolom CSV Colab", "Lengkap ✅" if not missing_all else "Sebagian Otomatis ⚙️")
     
-    st.subheader("Pemeriksaan Kolom Wajib")
+    st.subheader("Pemeriksaan Kolom Dataset Colab")
     col_status = pd.DataFrame({
-        "Nama Kolom Wajib": kolom_wajib,
-        "Status Ketersediaan": ["✅ Tersedia" if col in df.columns else "❌ Tidak Tersedia" for col in kolom_wajib]
+        "Nama Kolom": kolom_colab,
+        "Status Ketersediaan": ["✅ Tersedia" if col in df.columns else "❌ Tidak Tersedia" for col in kolom_colab]
     })
     st.table(col_status)
 
-    if missing_cols:
-        st.error(f"⚠️ **Dataset tidak valid!** Kolom wajib berikut tidak ditemukan: **{', '.join(missing_cols)}**.")
+    if missing_core:
+        st.error(f"⚠️ **Dataset tidak valid!** Kolom wajib berikut tidak ditemukan: **{', '.join(missing_core)}**.")
         st.stop()
     
     st.subheader("Pratinjau Dataset (10 Baris Pertama)")
-    st.dataframe(df.head(10), use_container_width=True)
+    tampil_cols = [c for c in kolom_colab if c in df.columns]
+    st.dataframe(df[tampil_cols].head(10), use_container_width=True)
     
     null_cleaned = df['Cleaned_Text'].isna().sum()
     null_likes = pd.to_numeric(df['like_count'], errors='coerce').isna().sum()
     st.info(f"ℹ️ **Info Dataset Utama:** Terdapat `{len(df)}` baris total. Baris teks bersih kosong: `{null_cleaned}` baris. Baris likes tidak valid: `{null_likes}` baris.")
 
-if missing_cols:
+if missing_core:
     st.stop()
 
 # ===================================================================
-# TAB 2: SENTIMEN (MENAMPILKAN HASIL SENTIMEN)
+# TAB 2: SENTIMEN (MENAMPILKAN HASIL SENTIMEN COLAB)
 # ===================================================================
 with tab2:
     st.header("😃 Hasil Analisis Sentimen")
     
-    sentiment_counts = df['sentiment'].value_counts()
-    sentiment_percent = (df['sentiment'].value_counts(normalize=True) * 100).round(2)
+    sentiment_counts = df['sentimen_sistem'].value_counts()
+    sentiment_percent = (df['sentimen_sistem'].value_counts(normalize=True) * 100).round(2)
     df_sent_summary = pd.DataFrame({
         'Kategori Sentimen': sentiment_counts.index,
         'Jumlah Postingan': sentiment_counts.values, 
@@ -146,19 +155,22 @@ with tab2:
             ax=ax
         )
         ax.set_ylabel("Jumlah Postingan")
-        ax.set_xlabel("Sentimen")
+        ax.set_xlabel("Sentimen Sistem")
+        ax.set_ylim(0, max(sentiment_counts.values) * 1.15)
         for i, v in enumerate(sentiment_counts.values):
-            ax.text(i, v + 3, str(v), ha='center', fontweight='bold')
+            ax.text(i, v + 5, str(v), ha='center', fontweight='bold')
         st.pyplot(fig)
         
-    st.subheader("Tabel Hasil Klasifikasi Postingan")
-    st.dataframe(df[['text', 'Cleaned_Text', 'sentiment']].head(20), use_container_width=True)
+    st.subheader("Tabel Hasil Klasifikasi Postingan (Beserta Skor Kepercayaan)")
+    st.dataframe(
+        df[['id', 'text', 'Cleaned_Text', 'sentimen_sistem', 'skor']].head(20),
+        use_container_width=True
+    )
     
     st.markdown("---")
     st.subheader("🔍 Ringkasan Pemeriksaan Manual (20 Sampel Acak)")
     
-    df_eval = df[['text', 'Cleaned_Text', 'sentiment']].sample(n=min(20, len(df)), random_state=42).copy()
-    df_eval.rename(columns={'sentiment': 'prediksi_sistem'}, inplace=True)
+    df_eval = df[['id', 'text', 'Cleaned_Text', 'sentimen_sistem', 'skor']].sample(n=min(20, len(df)), random_state=42).copy()
     
     label_kelompok = [
         'Positif', 'Negatif', 'Netral', 'Positif', 'Negatif',
@@ -167,25 +179,28 @@ with tab2:
         'Negatif', 'Netral', 'Negatif', 'Negatif', 'Negatif'
     ]
     df_eval['label_manual'] = label_kelompok[:len(df_eval)]
-    df_eval['Status'] = np.where(df_eval['label_manual'] == df_eval['prediksi_sistem'], '✅ Sesuai', '❌ Tidak Sesuai')
+    df_eval['Status'] = np.where(df_eval['label_manual'] == df_eval['sentimen_sistem'], '✅ Sesuai', '❌ Tidak Sesuai')
     
-    sesuai = (df_eval['label_manual'] == df_eval['prediksi_sistem']).sum()
+    sesuai = (df_eval['label_manual'] == df_eval['sentimen_sistem']).sum()
     acc = (sesuai / len(df_eval)) * 100
     
     col_e1, col_e2 = st.columns(2)
     col_e1.metric("Jumlah Sesuai", f"{sesuai} dari {len(df_eval)} sampel")
     col_e2.metric("Persentase Kesesuaian", f"{acc:.2f}%")
     
-    st.dataframe(df_eval[['text', 'label_manual', 'prediksi_sistem', 'Status']], use_container_width=True)
+    st.dataframe(
+        df_eval[['id', 'text', 'label_manual', 'sentimen_sistem', 'skor', 'Status']],
+        use_container_width=True
+    )
     
     st.subheader("📌 Pembahasan 3 Contoh Ketidaksesuaian")
     st.markdown("""
-    1. **Keluhan Gaji di Bawah UMR:** *"ngeluh ngeluh gaji under UMR ga worth it tapi tetep dilamar 😔😔😔"*  
-       * **Label Manual:** `Negatif` | **Prediksi Sistem:** `Positif` $\rightarrow$ Terjadi karena terdapat kata *"gaji"* di kamus positif, sedangkan kata *"ngeluh"* belum masuk kamus negatif.
-    2. **Keluhan Susah Cari Kerja:** *"tbh gue mau nangis aja si, temen gue banyak bgt lulusan sma/smk susah cari kerja bgt dan gaji mereka jauh di bawah umr..."*  
-       * **Label Manual:** `Negatif` | **Prediksi Sistem:** `Netral` $\rightarrow$ Skor seri antara kata positif (*"gaji"*) dan negatif (*"susah"*), padahal konteks utuhnya adalah kesedihan.
-    3. **Iklan Lowongan Kerja:** *"Like & Share | Lowongan Kerja Kasir di Arei Adventure Store Jogja 3 - Yogyakarta (Gaji UMR Jogja)"*  
-       * **Label Manual:** `Netral` | **Prediksi Sistem:** `Positif` $\rightarrow$ Kalimat informatif pengumuman lowongan kerja terbaca positif karena memuat kata *"gaji"*.
+1. **Sarkasme Syarat Lowongan Kerja (ID 501):** *"LOWONGAN KERJA *PRESIDEN RI 2024* Persyaratan... *Jago ngibul *Yang penting bisa BAHASA INGGRIS 😂😂 Gaji : UMR DKI..."*
+   - **Label Manual:** `Negatif` | **Prediksi Sistem:** `Netral` (`skor: 0.9495`) $\\rightarrow$ Model membaca struktur teks formal pengumuman lowongan kerja sebagai informasi netral dan gagal menangkap sindiran/sarkasme politik di dalamnya.
+2. **Keluhan Ketimpangan Syarat Kerja (ID 185):** *"Presiden: tamatan SMA, Wapres: tamatan SMP. Sementara lowongan kerja di mana-mana: Minimal S1, Pengalaman 2–5 tahun... Gaji Rp3–5 juta 😭"*
+   - **Label Manual:** `Negatif` | **Prediksi Sistem:** `Netral` (`skor: 0.9946`) $\\rightarrow$ Karena mayoritas teks disusun seperti daftar poin kualifikasi kerja, model mengklasifikasikannya sebagai kalimat informatif (`Netral`), meskipun konteks utuhnya mengeluhkan beratnya persyaratan kerja.
+3. **Cerita Pengalaman Buka Lowongan Kerja (ID 79):** *"mau cerita dikit, bulan Maret lalu gw buka lowongan kerja, baru sejam aja udh banjir pelamar... INDONESIA DARURAT LAPANGAN PEKERJAAN⁉️"*
+   - **Label Manual:** `Netral` | **Prediksi Sistem:** `Negatif` (`skor: 0.9671`) $\\rightarrow$ Penulis berniat membagikan cerita observasi faktual, namun adanya kata berkonotasi genting seperti *"takut overwhelming"* dan *"darurat"* mendorong model memberikan label `Negatif`.
     """)
 
 # ===================================================================
@@ -223,8 +238,8 @@ with tab3:
 
     st.subheader("💡 Penjelasan & Perbedaan Cluster")
     st.markdown("""
-    * **Perbedaan Ketiga Cluster:** Cluster 0 berisi pengumuman lowongan kerja, Cluster 1 fokus pada keluh kesah *fresh graduate* terkait syarat pengalaman kerja, dan Cluster 2 berisi obrolan tentang besaran gaji UMR dan biaya hidup.
-    * **Tumpang Tindih (Overlap):** Masih terdapat tumpang tindih pada kata umum seperti `kerja`, `gaji`, dan `umr` karena informasi lowongan kerja maupun keluhan pekerja sama-sama sering menyebutkan istilah tersebut.
+- **Perbedaan Ketiga Cluster:** Cluster 0 (190 postingan) berisi pengumuman lowongan kerja, Cluster 1 (96 postingan) fokus pada keluh kesah *fresh graduate* terkait syarat pengalaman kerja, dan Cluster 2 (230 postingan) berisi obrolan tentang besaran gaji UMR dan biaya hidup.
+- **Tumpang Tindih (Overlap):** Masih terdapat tumpang tindih pada kata umum seperti `kerja`, `gaji`, dan `umr` karena informasi lowongan kerja maupun keluhan pekerja sama-sama sering menyebutkan istilah tersebut.
     """)
 
 # ===================================================================
@@ -281,8 +296,8 @@ with tab4:
 
     st.subheader("📖 Interpretasi Hasil Regresi")
     st.markdown(f"""
-    * **Makna MAE (`{mae:,.2f}`):** Rata-rata kesalahan prediksi model terhadap data uji adalah sekitar {mae:,.0f} likes, dipengaruhi adanya postingan *viral* (outlier) dengan puluhan ribu likes.
-    * **Makna $R^2$ (`{r2:.4f}`):** Nilai $R^2$ negatif/mendekati nol menunjukkan bahwa jumlah kata dan hashtag saja tidak mampu menjelaskan variasi jumlah likes. Faktor seperti jumlah *followers*, waktu unggah, dan isi topik jauh lebih berpengaruh.
+- **Makna MAE (`{mae:,.2f}`):** Rata-rata kesalahan prediksi model terhadap data uji adalah sekitar {mae:,.0f} likes, dipengaruhi adanya postingan *viral* (outlier) dengan puluhan ribu likes.
+- **Makna $R^2$ (`{r2:.4f}`):** Nilai $R^2$ negatif/mendekati nol menunjukkan bahwa jumlah kata dan hashtag saja tidak mampu menjelaskan variasi jumlah likes. Faktor seperti jumlah *followers*, waktu unggah, dan isi topik jauh lebih berpengaruh.
     """)
 
 # ===================================================================
@@ -295,14 +310,14 @@ col_a, col_b = st.columns(2)
 with col_a:
     st.subheader("🔍 3 Temuan Utama")
     st.markdown("""
-    1. **Isu Gaji UMR Mendominasi**: Mayoritas percakapan (230 postingan di Cluster 2) membahas standar gaji UMR dan biaya hidup.
-    2. **Tantangan Fresh Graduate**: Kelompok diskusi tersendiri (96 postingan di Cluster 1) menyoroti sulitnya syarat pengalaman kerja bagi lulusan baru.
-    3. **Jumlah Kata & Hashtag Tidak Menentukan Likes**: Evaluasi regresi ($R^2 = -0.0182$) membuktikan panjang cuitan dan hashtag tidak berkorelasi kuat dengan jumlah likes.
+1. **Isu Gaji UMR Mendominasi**: Mayoritas percakapan (230 postingan di Cluster 2) membahas standar gaji UMR dan biaya hidup.
+2. **Tantangan Fresh Graduate**: Kelompok diskusi tersendiri (96 postingan di Cluster 1) menyoroti sulitnya syarat pengalaman kerja bagi lulusan baru.
+3. **Jumlah Kata & Hashtag Tidak Menentukan Likes**: Evaluasi regresi ($R^2 = -0.0182$) membuktikan panjang cuitan dan hashtag tidak berkorelasi kuat dengan jumlah likes.
     """)
 
 with col_b:
     st.subheader("⚠️ 2 Keterbatasan Data & Metode")
     st.markdown("""
-    1. **Keterbatasan Lexicon Sentimen**: Kamus kata sederhana belum dapat membedakan kalimat keluhan atau sarkasme yang memuat kata positif seperti *"gaji"*.
-    2. **Keterbatasan Fitur Regresi**: Ketidaktersediaan data jumlah *followers* akun dan adanya *outlier* cuitan viral membuat estimasi regresi linear dua variabel memiliki error (MAE) yang besar.
+1. **Keterbatasan Deteksi Sarkasme pada Sentimen**: Model sentimen terkadang masih mengklasifikasikan sindiran/sarkasme berformat pengumuman lowongan kerja sebagai kalimat informatif (`Netral`).
+2. **Keterbatasan Fitur Regresi**: Ketidaktersediaan data jumlah *followers* akun dan adanya *outlier* cuitan viral membuat estimasi regresi linear dua variabel memiliki error (MAE) yang besar.
     """)
