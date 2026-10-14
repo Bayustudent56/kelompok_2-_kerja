@@ -157,7 +157,7 @@ with tab2:
         ax.set_ylim(0, max(sentiment_counts.values) * 1.15)
         for i, v in enumerate(sentiment_counts.values):
             ax.text(i, v + 5, str(v), ha='center', fontweight='bold')
-        st.pyplot(fig)
+        st.pyplot(fig, clear_figure=True)
         
     st.subheader("Tabel Hasil Klasifikasi Postingan (Beserta Skor Kepercayaan)")
     st.dataframe(
@@ -177,15 +177,19 @@ with tab2:
     
     df_eval = None
     
-    # 1. Jika ada file yang di-upload, baca langsung dari file upload
+    # 1. Cek apakah user sudah mengunggah file
     if uploaded_eval is not None:
-        if uploaded_eval.name.endswith('.csv'):
-            df_eval = pd.read_csv(uploaded_eval)
-        else:
-            df_eval = pd.read_excel(uploaded_eval)
-        st.success(f"✅ Menampilkan data dari file upload: **{uploaded_eval.name}**")
+        try:
+            if uploaded_eval.name.endswith('.csv'):
+                df_eval = pd.read_csv(uploaded_eval)
+            else:
+                df_eval = pd.read_excel(uploaded_eval)
+            st.success(f"✅ Menampilkan data dari file upload: **{uploaded_eval.name}**")
+        except Exception as e:
+            st.error(f"❌ Gagal membaca file yang di-upload: {e}")
+            
+    # 2. Jika belum di-upload, cek apakah ada file bawaan lokal di folder dataset/
     else:
-        # 2. Jika belum upload, coba cari file bawaan di folder dataset/
         for path_lokal in [
             "dataset/hasil_komparasi_sentimen.xlsx",
             "dataset/hasil_komparasi_sentimen (2) (1).xlsx",
@@ -193,39 +197,40 @@ with tab2:
         ]:
             try:
                 df_eval = pd.read_excel(path_lokal)
+                st.info(f"ℹ️ Menggunakan file bawaan lokal: **{path_lokal}**")
                 break
             except Exception:
                 pass
-                
-    # 3. Jika file upload / lokal belum ada atau format kolomnya belum lengkap, gunakan fallback 20 sampel awal
+
+    # 3. Tampilkan data HANYA JIKA df_eval berhasil dimuat (dari upload atau file lokal)
     kolom_wajib = ['id', 'text', 'label_manual', 'sentimen_sistem', 'skor']
-    if df_eval is None or not all(kol in df_eval.columns for kol in kolom_wajib):
-        df_eval = df[['id', 'text', 'Cleaned_Text', 'sentimen_sistem', 'skor']].sample(n=min(20, len(df)), random_state=42).copy()
-        label_kelompok = [
-            'Positif', 'Negatif', 'Netral', 'Positif', 'Negatif',
-            'Netral', 'Netral', 'Netral', 'Negatif', 'Negatif',
-            'Netral', 'Positif', 'Positif', 'Netral', 'Negatif',
-            'Negatif', 'Netral', 'Negatif', 'Negatif', 'Negatif'
-        ]
-        df_eval['label_manual'] = label_kelompok[:len(df_eval)]
     
-    # Pastikan kolom Status terisi dan akurat
-    if 'Status' not in df_eval.columns:
-        df_eval['Status'] = np.where(df_eval['label_manual'] == df_eval['sentimen_sistem'], '✅ Sesuai', '❌ Tidak Sesuai')
-    
-    # Hitung metrik kesesuaian berdasarkan isi tabel
-    sesuai = (df_eval['label_manual'] == df_eval['sentimen_sistem']).sum()
-    acc = (sesuai / len(df_eval)) * 100 if len(df_eval) > 0 else 0
-    
-    col_e1, col_e2 = st.columns(2)
-    col_e1.metric("Jumlah Sesuai", f"{sesuai} dari {len(df_eval)} sampel")
-    col_e2.metric("Persentase Kesesuaian", f"{acc:.2f}%")
-    
-    st.dataframe(
-        df_eval[['id', 'text', 'label_manual', 'sentimen_sistem', 'skor', 'Status']],
-        use_container_width=True,
-        hide_index=True
-    )
+    if df_eval is not None:
+        # Validasi kolom wajib
+        if all(kol in df_eval.columns for kol in kolom_wajib):
+            # Pastikan kolom Status terisi dan akurat
+            if 'Status' not in df_eval.columns:
+                df_eval['Status'] = np.where(df_eval['label_manual'] == df_eval['sentimen_sistem'], '✅ Sesuai', '❌ Tidak Sesuai')
+            
+            # Hitung metrik kesesuaian berdasarkan isi tabel
+            sesuai = (df_eval['label_manual'] == df_eval['sentimen_sistem']).sum()
+            acc = (sesuai / len(df_eval)) * 100 if len(df_eval) > 0 else 0
+            
+            col_e1, col_e2 = st.columns(2)
+            col_e1.metric("Jumlah Sesuai", f"{sesuai} dari {len(df_eval)} sampel")
+            col_e2.metric("Persentase Kesesuaian", f"{acc:.2f}%")
+            
+            st.dataframe(
+                df_eval[['id', 'text', 'label_manual', 'sentimen_sistem', 'skor', 'Status']],
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.warning(f"⚠️ Kolom pada file tidak lengkap. Pastikan file memiliki kolom: {', '.join(kolom_wajib)}")
+    else:
+        # Jika belum ada file yang di-upload dan tidak ada file lokal, tampilkan pesan panduan
+        st.info("👆 Silakan upload file hasil komparasi sentimen (.xlsx / .csv) di atas untuk melihat ringkasan pemeriksaan manual dan metrik kesesuaian.")
+
 # TAB 3: CLUSTERING (MENAMPILKAN HASIL CLUSTER)
 with tab3:
     st.header("🏷️ Hasil Clustering Data Teks (K-Means)")
