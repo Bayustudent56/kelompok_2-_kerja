@@ -91,7 +91,6 @@ tab1, tab2, tab3, tab4 = st.tabs(["📁 Data", "😃 Sentimen", "🏷️ Cluster
 
 # ===================================================================
 # TAB 1: DATA
-# ===================================================================
 with tab1:
     st.header("📁 Pratinjau & Ringkasan Dataset")
     
@@ -126,7 +125,6 @@ if missing_core:
 
 # ===================================================================
 # TAB 2: SENTIMEN (MENAMPILKAN HASIL SENTIMEN COLAB)
-# ===================================================================
 with tab2:
     st.header("😃 Hasil Analisis Sentimen")
     
@@ -193,19 +191,7 @@ with tab2:
         use_container_width=True
     )
     
-    st.subheader("📌 Pembahasan 3 Contoh Ketidaksesuaian")
-    st.markdown("""
-1. **Sarkasme Syarat Lowongan Kerja (ID 501):** *"LOWONGAN KERJA *PRESIDEN RI 2024* Persyaratan... *Jago ngibul *Yang penting bisa BAHASA INGGRIS 😂😂 Gaji : UMR DKI..."*
-   - **Label Manual:** `Negatif` | **Prediksi Sistem:** `Netral` (`skor: 0.9495`) $\\rightarrow$ Model membaca struktur teks formal pengumuman lowongan kerja sebagai informasi netral dan gagal menangkap sindiran/sarkasme politik di dalamnya.
-2. **Keluhan Ketimpangan Syarat Kerja (ID 185):** *"Presiden: tamatan SMA, Wapres: tamatan SMP. Sementara lowongan kerja di mana-mana: Minimal S1, Pengalaman 2–5 tahun... Gaji Rp3–5 juta 😭"*
-   - **Label Manual:** `Negatif` | **Prediksi Sistem:** `Netral` (`skor: 0.9946`) $\\rightarrow$ Karena mayoritas teks disusun seperti daftar poin kualifikasi kerja, model mengklasifikasikannya sebagai kalimat informatif (`Netral`), meskipun konteks utuhnya mengeluhkan beratnya persyaratan kerja.
-3. **Cerita Pengalaman Buka Lowongan Kerja (ID 79):** *"mau cerita dikit, bulan Maret lalu gw buka lowongan kerja, baru sejam aja udh banjir pelamar... INDONESIA DARURAT LAPANGAN PEKERJAAN⁉️"*
-   - **Label Manual:** `Netral` | **Prediksi Sistem:** `Negatif` (`skor: 0.9671`) $\\rightarrow$ Penulis berniat membagikan cerita observasi faktual, namun adanya kata berkonotasi genting seperti *"takut overwhelming"* dan *"darurat"* mendorong model memberikan label `Negatif`.
-    """)
-
-# ===================================================================
 # TAB 3: CLUSTERING (MENAMPILKAN HASIL CLUSTER)
-# ===================================================================
 with tab3:
     st.header("🏷️ Hasil Clustering Data Teks (K-Means)")
     
@@ -244,80 +230,88 @@ with tab3:
 
 # ===================================================================
 # TAB 4: REGRESI (EVALUASI & FORMULIR INTERAKTIF)
-# ===================================================================
 with tab4:
     st.header("📈 Regresi Linear (Estimasi Jumlah Likes)")
     
+    # 1. Konversi tipe data ke numerik (Target y + Fitur X)
     df['like_count_num'] = pd.to_numeric(df['like_count'], errors='coerce')
-    df_reg_clean = df.dropna(subset=['like_count_num']).copy()
+    df['reply_count_num'] = pd.to_numeric(df['reply_count'], errors='coerce')
+    df['retweet_count_num'] = pd.to_numeric(df['retweet_count'], errors='coerce')
+    
+    # Bersihkan baris yang memiliki nilai kosong (NaN) pada ketiga kolom tersebut
+    kolom_wajib = ['like_count_num', 'reply_count_num', 'retweet_count_num']
+    df_reg_clean = df.dropna(subset=kolom_wajib).copy()
     dropped_reg = len(df) - len(df_reg_clean)
-    st.caption(f"*Catatan: Menggunakan {len(df_reg_clean)} baris valid ({dropped_reg} baris dikeluarkan karena target likes kosong/tidak valid).*")
     
-    X_reg = df_reg_clean[['word_count', 'hashtag_count']]
-    y_reg = df_reg_clean['like_count_num']
+    st.caption(
+        f"*Catatan: Menggunakan {len(df_reg_clean):,} baris valid "
+        f"({dropped_reg:,} baris dikeluarkan karena data likes, reply, atau retweet kosong/tidak valid).*"
+    )
     
-    X_train, X_test, y_train, y_test = train_test_split(X_reg, y_reg, test_size=0.2, random_state=42)
-    
-    model_reg = LinearRegression()
-    model_reg.fit(X_train, y_train)
-    y_pred = model_reg.predict(X_test)
-    
-    mae = mean_absolute_error(y_test, y_pred)
-    r2 = r2_score(y_test, y_pred)
-    
-    col1, col2 = st.columns(2)
-    col1.metric("MAE (Mean Absolute Error)", f"{mae:,.2f}")
-    col2.metric("R² Score", f"{r2:.4f}")
-    
-    col_g1, col_g2 = st.columns([1.3, 1])
-    with col_g1:
-        st.subheader("Grafik Likes Aktual vs Prediksi")
-        fig, ax = plt.subplots(figsize=(7, 4.5))
-        ax.scatter(y_test, y_pred, color='royalblue', alpha=0.6, label='Data Uji')
-        ax.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--', lw=2, label='Garis Ideal')
-        ax.set_xlabel("Likes Aktual")
-        ax.set_ylabel("Likes Prediksi")
-        ax.legend()
-        st.pyplot(fig)
+    # 2. Pastikan jumlah baris cukup untuk di-split
+    if len(df_reg_clean) < 10:
+        st.error("⚠️ Data valid terlalu sedikit (kurang dari 10 baris) untuk menjalankan model regresi.")
+    else:
+        # X = Reply & Retweet, y = Likes
+        X_reg = df_reg_clean[['reply_count_num', 'retweet_count_num']]
+        y_reg = df_reg_clean['like_count_num']
         
-    with col_g2:
-        st.subheader("🧮 Formulir Estimasi Likes")
-        with st.form("form_likes"):
-            input_words = st.number_input("Jumlah Kata dalam Postingan:", min_value=1, max_value=500, value=20)
-            input_hashtags = st.number_input("Jumlah Hashtag (#):", min_value=0, max_value=50, value=1)
-            submit_btn = st.form_submit_button("Estimasi Likes")
+        X_train, X_test, y_train, y_test = train_test_split(
+            X_reg, y_reg, test_size=0.2, random_state=42
+        )
+        
+        model_reg = LinearRegression()
+        model_reg.fit(X_train, y_train)
+        y_pred = model_reg.predict(X_test)
+        
+        mae = mean_absolute_error(y_test, y_pred)
+        r2 = r2_score(y_test, y_pred)
+        
+        # 3. Tampilkan Metrik Evaluasi & Koefisien
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("MAE (Mean Absolute Error)", f"{mae:,.2f}")
+        col2.metric("R² Score", f"{r2:.4f}")
+        col3.metric("Koef. Reply", f"{model_reg.coef_[0]:,.2f}")
+        col4.metric("Koef. Retweet", f"{model_reg.coef_[1]:,.2f}")
+        
+        col_g1, col_g2 = st.columns([1.3, 1])
+        with col_g1:
+            st.subheader("Grafik Likes Aktual vs Prediksi")
+            fig, ax = plt.subplots(figsize=(7, 4.5))
+            ax.scatter(y_test, y_pred, color='royalblue', alpha=0.6, edgecolors='w', linewidth=0.5, label='Data Uji')
             
-            if submit_btn:
-                input_df = pd.DataFrame({'word_count': [input_words], 'hashtag_count': [input_hashtags]})
-                pred_val = model_reg.predict(input_df)[0]
-                st.success(f"📌 Estimasi Jumlah Likes: **{pred_val:,.2f}** likes")
-                if pred_val < 0:
-                    st.warning("⚠️ Catatan: Nilai negatif tidak bermakna sebagai jumlah likes nyata dan menunjukkan keterbatasan model regresi linear sederhana.")
-
-    st.subheader("📖 Interpretasi Hasil Regresi")
-    st.markdown(f"""
-- **Makna MAE (`{mae:,.2f}`):** Rata-rata kesalahan prediksi model terhadap data uji adalah sekitar {mae:,.0f} likes, dipengaruhi adanya postingan *viral* (outlier) dengan puluhan ribu likes.
-- **Makna $R^2$ (`{r2:.4f}`):** Nilai $R^2$ negatif/mendekati nol menunjukkan bahwa jumlah kata dan hashtag saja tidak mampu menjelaskan variasi jumlah likes. Faktor seperti jumlah *followers*, waktu unggah, dan isi topik jauh lebih berpengaruh.
-    """)
-
-# ===================================================================
-# BAGIAN AKHIR: TEMUAN & KETERBATASAN
-# ===================================================================
-st.markdown("---")
-st.header("📌 Kesimpulan Analisis")
-
-col_a, col_b = st.columns(2)
-with col_a:
-    st.subheader("🔍 3 Temuan Utama")
-    st.markdown("""
-1. **Isu Gaji UMR Mendominasi**: Mayoritas percakapan (230 postingan di Cluster 2) membahas standar gaji UMR dan biaya hidup.
-2. **Tantangan Fresh Graduate**: Kelompok diskusi tersendiri (96 postingan di Cluster 1) menyoroti sulitnya syarat pengalaman kerja bagi lulusan baru.
-3. **Jumlah Kata & Hashtag Tidak Menentukan Likes**: Evaluasi regresi ($R^2 = -0.0182$) membuktikan panjang cuitan dan hashtag tidak berkorelasi kuat dengan jumlah likes.
-    """)
-
-with col_b:
-    st.subheader("⚠️ 2 Keterbatasan Data & Metode")
-    st.markdown("""
-1. **Keterbatasan Deteksi Sarkasme pada Sentimen**: Model sentimen terkadang masih mengklasifikasikan sindiran/sarkasme berformat pengumuman lowongan kerja sebagai kalimat informatif (`Netral`).
-2. **Keterbatasan Fitur Regresi**: Ketidaktersediaan data jumlah *followers* akun dan adanya *outlier* cuitan viral membuat estimasi regresi linear dua variabel memiliki error (MAE) yang besar.
-    """)
+            # Garis Ideal (Aktual = Prediksi)
+            min_val = min(y_test.min(), y_pred.min())
+            max_val = max(y_test.max(), y_pred.max())
+            ax.plot([min_val, max_val], [min_val, max_val], 'r--', lw=2, label='Garis Ideal (y = ŷ)')
+            
+            ax.set_xlabel("Likes Aktual")
+            ax.set_ylabel("Likes Prediksi")
+            ax.grid(True, linestyle=':', alpha=0.6)
+            ax.legend()
+            fig.tight_layout()
+            st.pyplot(fig)
+            plt.close(fig)  # Mencegah memory leak di Streamlit
+            
+        with col_g2:
+            st.subheader("🧮 Formulir Estimasi Likes")
+            with st.form("form_likes"):
+                input_reply = st.number_input("Jumlah Reply (Balasan):", min_value=0, max_value=100000, value=10, step=1)
+                input_retweet = st.number_input("Jumlah Retweet:", min_value=0, max_value=100000, value=25, step=1)
+                submit_btn = st.form_submit_button("Estimasi Likes")
+                
+                if submit_btn:
+                    input_df = pd.DataFrame({
+                        'reply_count_num': [input_reply],
+                        'retweet_count_num': [input_retweet]
+                    })
+                    pred_val = model_reg.predict(input_df)[0]
+                    
+                    st.success(f"📌 Estimasi Jumlah Likes: **{pred_val:,.2f}** likes")
+                    if pred_val < 0:
+                        st.warning(
+                            "⚠️ Catatan: Nilai negatif muncul karena titik potong (intercept) model bernilai negatif "
+                            "ketika jumlah reply dan retweet sangat kecil."
+                        )
+                    else:
+                        st.info(f"💡 Dibulatkan menjadi sekitar **{max(0, round(pred_val)):,}** likes.")
