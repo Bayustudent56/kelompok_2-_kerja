@@ -1,9 +1,20 @@
+# Framework untuk menjalankan aplikasi dashboard web
+streamlit
+
+# Library untuk membaca dan mengolah data CSV dan Excel
 pandas==2.2.3
+
+# Library untuk operasi numerik dan perhitungan array
 numpy==2.1.3
-nltk==3.9.1
+
+# Library machine learning untuk TF-IDF, K-Means, dan regresi linear
 scikit-learn==1.6.1
+
+# Library untuk membuat grafik dan visualisasi data
 matplotlib==3.10.0
-torch==2.11.0
-transformers==5.18.0
-joblib==1.6.0
+
+# Library untuk visualisasi statistik, termasuk grafik distribusi sentimen
+seaborn
+
+# Library untuk membaca dan mengolah file Excel (.xlsx)
 openpyxl==3.1.5
