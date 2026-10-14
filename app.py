@@ -236,9 +236,9 @@ with tab3:
     st.header("🏷️ Hasil Clustering Data Teks (K-Means)")
     
     tema_map = {
-        0: "Informasi Lowongan Kerja & Kualifikasi Pelamar",
-        1: "Tantangan Fresh Graduate & Syarat Pengalaman Kerja",
-        2: "Diskusi Gaji UMR, Keluhan Pekerja, dan Biaya Hidup"
+        0: "Diskusi Gaji UMR, Keluhan Pekerja, dan Biaya Hidup",
+        1: "Informasi Lowongan Kerja & Kualifikasi Pelamar",
+        2: "Tantangan Fresh Graduate & Syarat Pengalaman Kerja"
     }
     
     cluster_counts = df['cluster'].value_counts().sort_index()
