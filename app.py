@@ -166,7 +166,7 @@ with tab2:
     )
     
     st.markdown("---")
-    st.subheader("🔍 Ringkasan Pemeriksaan Manual")
+    st.subheader(" Ringkasan Pemeriksaan Manual")
     
     # Fitur Upload File Excel (.xlsx) atau CSV (.csv)
     uploaded_eval = st.file_uploader(
