@@ -6,6 +6,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import KMeans
+from sklearn.decomposition import TruncatedSVD
+from sklearn.metrics import silhouette_score
+from wordcloud import WordCloud
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, r2_score
@@ -67,16 +70,7 @@ if not missing_core:
     if 'skor' not in df.columns:
         df['skor'] = np.nan
 
-    # 2. Cek kolom cluster & kata dominan (sama persis dengan parameter Colab)
-    if 'cluster' not in df.columns or 'cluster_top_words' not in df.columns:
-        vectorizer = TfidfVectorizer(max_features=5000, ngram_range=(1, 2))
-        X_tfidf = vectorizer.fit_transform(df['Cleaned_Text'].fillna('').astype(str))
-        kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
-        df['cluster'] = kmeans.fit_predict(X_tfidf)
-        terms = vectorizer.get_feature_names_out()
-        order_centroids = kmeans.cluster_centers_.argsort()[:, ::-1]
-        top_words_map = {c_id: ", ".join([terms[ind] for ind in order_centroids[c_id, :5]]) for c_id in range(3)}
-        df['cluster_top_words'] = df['cluster'].map(top_words_map)
+    # Clustering diproses di Tab 3 agar dapat memakai label dari hasil Colab.
 
     # 3. Cek kolom fitur regresi
     if 'word_count' not in df.columns:
@@ -114,7 +108,7 @@ with tab1:
     
     st.subheader("Pratinjau Dataset (10 Baris Pertama)")
     tampil_cols = [c for c in kolom_colab if c in df.columns]
-    st.dataframe(df[tampil_cols].head(10), use_container_width=True)
+    st.dataframe(df[tampil_cols].head(10), width="stretch")
     
     null_cleaned = df['Cleaned_Text'].isna().sum()
     null_likes = pd.to_numeric(df['like_count'], errors='coerce').isna().sum()
@@ -139,7 +133,7 @@ with tab2:
     col1, col2 = st.columns([1, 1.5])
     with col1:
         st.subheader("Ringkasan Kategori")
-        st.dataframe(df_sent_summary, use_container_width=True, hide_index=True)
+        st.dataframe(df_sent_summary, width="stretch", hide_index=True)
     
     with col2:
         st.subheader("Grafik Distribusi Sentimen")
@@ -160,9 +154,10 @@ with tab2:
         st.pyplot(fig, clear_figure=True)
         
     st.subheader("Tabel Hasil Klasifikasi Postingan (Beserta Skor Kepercayaan)")
+    kolom_hasil_sentimen = [c for c in ['id', 'text', 'Cleaned_Text', 'sentimen_sistem', 'skor'] if c in df.columns]
     st.dataframe(
-        df[['id', 'text', 'Cleaned_Text', 'sentimen_sistem', 'skor']].head(20),
-        use_container_width=True
+        df[kolom_hasil_sentimen].head(20),
+        width="stretch"
     )
     
     st.markdown("---")
@@ -209,50 +204,279 @@ with tab2:
             
             st.dataframe(
                 df_eval[['id', 'text', 'label_manual', 'sentimen_sistem', 'skor', 'Status']],
-                use_container_width=True,
+                width="stretch",
                 hide_index=True
             )
         else:
             st.warning(f"⚠️ Kolom pada file tidak lengkap. Pastikan file memiliki kolom: {', '.join(kolom_wajib)}")
     
 
-# TAB 3: CLUSTERING (MENAMPILKAN HASIL CLUSTER)
+# TAB 3: CLUSTERING (VISUALISASI + INTERPRETASI)
 with tab3:
-    st.header(" Hasil Clustering Data Teks (K-Means)")
-    
-    tema_map = {
-        0: "Diskusi Gaji UMR, Keluhan Pekerja, dan Biaya Hidup",
-        1: "Informasi Lowongan Kerja & Kualifikasi Pelamar",
-        2: "Tantangan Fresh Graduate & Syarat Pengalaman Kerja"
-    }
-    
-    cluster_counts = df['cluster'].value_counts().sort_index()
-    col_c1, col_c2, col_c3 = st.columns(3)
-    col_c1.metric("Ukuran Cluster 0", f"{cluster_counts.get(0, 0)} postingan")
-    col_c2.metric("Ukuran Cluster 1", f"{cluster_counts.get(1, 0)} postingan")
-    col_c3.metric("Ukuran Cluster 2", f"{cluster_counts.get(2, 0)} postingan")
-    st.markdown("---")
+    st.header("🏷️ Analisis Clustering Percakapan Dunia Kerja")
+    st.caption("Pengelompokan teks menggunakan TF-IDF dan K-Means dengan 3 cluster.")
 
-    for c_id in range(3):
-        st.subheader(f"🔹 Cluster {c_id}: {tema_map.get(c_id, f'Tema {c_id}')}")
-        df_c = df[df['cluster'] == c_id]
-        c_count = len(df_c)
-        top_words = df_c['cluster_top_words'].iloc[0] if c_count > 0 else "-"
-        
-        st.write(f"- **Ukuran Cluster**: `{c_count}` postingan ({(c_count/len(df)*100):.1f}%)")
-        st.write(f"- **5 Kata Dominan**: `{top_words}`")
-        st.write("- **3 Contoh Postingan**:")
-        
-        for idx, sample_text in enumerate(df_c['text'].head(3).tolist(), 1):
-            st.info(f"**Contoh {idx}:** {sample_text}")
+    uploaded_cluster = st.file_uploader(
+        "Opsional: unggah kerja_clustering.csv agar label cluster sama dengan hasil Colab",
+        type=["csv"],
+        key="upload_kerja_clustering"
+    )
+
+    # Salinan khusus untuk clustering agar bagian tab lain tidak berubah.
+    df_cluster = df.copy()
+    pakai_label_colab = False
+
+    if uploaded_cluster is not None:
+        try:
+            df_colab = pd.read_csv(uploaded_cluster)
+            kolom_teks_cluster = next(
+                (c for c in ["text", "full_text", "teks_asli"] if c in df_colab.columns),
+                None
+            )
+            kolom_label_cluster = next(
+                (c for c in ["cluster", "Cluster"] if c in df_colab.columns),
+                None
+            )
+            if kolom_teks_cluster is None or kolom_label_cluster is None:
+                st.warning("File clustering harus memiliki kolom teks (text/full_text) dan cluster.")
+            else:
+                # Normalisasi teks untuk pencocokan yang lebih tahan terhadap spasi dan kapitalisasi.
+                df_cluster["_key_cluster"] = df_cluster["text"].fillna("").astype(str).str.strip().str.lower()
+                df_colab["_key_cluster"] = df_colab[kolom_teks_cluster].fillna("").astype(str).str.strip().str.lower()
+                label_map = (df_colab.drop_duplicates("_key_cluster")
+                             .set_index("_key_cluster")[kolom_label_cluster].to_dict())
+                label_terpasang = df_cluster["_key_cluster"].map(label_map)
+                jumlah_cocok = int(label_terpasang.notna().sum())
+                if jumlah_cocok > 0:
+                    df_cluster["cluster"] = label_terpasang
+                    df_cluster["cluster"] = pd.to_numeric(df_cluster["cluster"], errors="coerce")
+                    df_cluster = df_cluster[df_cluster["cluster"].notna()].copy()
+                    df_cluster["cluster"] = df_cluster["cluster"].astype(int)
+                    pakai_label_colab = True
+                    st.success(f"Label cluster dari Colab berhasil dicocokkan untuk {jumlah_cocok} postingan.")
+                    if jumlah_cocok < len(df):
+                        st.info(f"{len(df) - jumlah_cocok} postingan tidak memiliki pasangan teks di file clustering dan tidak disertakan pada visualisasi ini.")
+                else:
+                    st.warning("Tidak ada teks yang cocok antara dataset utama dan file clustering. K-Means akan dihitung ulang untuk tab ini.")
+        except Exception as e:
+            st.warning(f"File clustering gagal dibaca ({e}). K-Means akan dihitung ulang untuk tab ini.")
+
+    # Teks yang digunakan: prioritaskan Cleaned_Text; fallback ke teks asli.
+    kolom_teks_model = "Cleaned_Text" if "Cleaned_Text" in df_cluster.columns else "text"
+    teks_model = df_cluster[kolom_teks_model].fillna("").astype(str).str.strip()
+    valid_teks = teks_model.ne("")
+    df_cluster = df_cluster.loc[valid_teks].copy()
+    teks_model = teks_model.loc[valid_teks]
+
+    if len(df_cluster) < 3:
+        st.warning("Data teks valid terlalu sedikit untuk menjalankan clustering. Periksa file CSV yang diunggah.")
+    else:
+        # Stopword umum Bahasa Indonesia; negasi penting tetap dipertahankan.
+        stopwords_id = {
+            "yang", "dan", "di", "ke", "dari", "ini", "itu", "untuk", "dengan", "pada", "adalah",
+            "atau", "karena", "jadi", "saat", "dalam", "akan", "ada", "juga", "lebih", "sudah", "belum",
+            "bisa", "dapat", "agar", "para", "oleh", "sebagai", "nya", "sih", "dong", "nih", "deh", "lah",
+            "aja", "aku", "saya", "kamu", "dia", "mereka", "kami", "kita", "rt", "https", "http", "co"
+        }
+        vectorizer = TfidfVectorizer(
+            max_features=5000,
+            ngram_range=(1, 2),
+            stop_words=list(stopwords_id),
+            min_df=1
+        )
+        try:
+            X_tfidf = vectorizer.fit_transform(teks_model)
+        except ValueError:
+            st.error("Teks tidak memiliki kosakata yang cukup untuk clustering. Periksa kolom teks bersih.")
+            st.stop()
+
+        if not pakai_label_colab:
+            model_kmeans = KMeans(n_clusters=3, init="k-means++", max_iter=300, n_init=10, random_state=42)
+            df_cluster["cluster"] = model_kmeans.fit_predict(X_tfidf)
+            st.info("K-Means dihitung di Streamlit. Untuk mempertahankan label persis dari Colab, unggah kerja_clustering.csv.")
+
+        # Pastikan label numerik dan tampilkan hanya cluster yang benar-benar ada.
+        df_cluster["cluster"] = pd.to_numeric(df_cluster["cluster"], errors="coerce")
+        df_cluster = df_cluster[df_cluster["cluster"].notna()].copy()
+        df_cluster["cluster"] = df_cluster["cluster"].astype(int)
+        cluster_ids = sorted(df_cluster["cluster"].unique().tolist())
+        if not cluster_ids:
+            st.warning("Tidak ditemukan label cluster yang valid.")
+            st.stop()
+
+        # Hitung kata dominan berdasarkan rata-rata bobot TF-IDF dalam setiap cluster.
+        terms = vectorizer.get_feature_names_out()
+        teks_index = df_cluster.index.tolist()
+        # X_tfidf dan df_cluster tetap sebaris setelah validasi teks; gunakan posisi yang selaras.
+        if X_tfidf.shape[0] != len(df_cluster):
+            # Bangun ulang matriks agar selalu selaras jika beberapa teks kosong terbuang.
+            X_tfidf = vectorizer.fit_transform(df_cluster[kolom_teks_model].fillna("").astype(str))
+            terms = vectorizer.get_feature_names_out()
+        top_words_map = {}
+        for cid in cluster_ids:
+            positions = np.flatnonzero(df_cluster["cluster"].to_numpy() == cid)
+            if len(positions):
+                mean_scores = np.asarray(X_tfidf[positions].mean(axis=0)).ravel()
+                top_idx = mean_scores.argsort()[::-1]
+                top_words_map[cid] = [(terms[i], float(mean_scores[i])) for i in top_idx if mean_scores[i] > 0][:10]
+            else:
+                top_words_map[cid] = []
+
+        cluster_counts = df_cluster["cluster"].value_counts().sort_index()
+        total_cluster = len(df_cluster)
+        st.subheader("Ringkasan Dataset Clustering")
+        metrics = st.columns(3)
+        metrics[0].metric("Total postingan dianalisis", f"{total_cluster:,}")
+        metrics[1].metric("Jumlah cluster ditemukan", str(len(cluster_ids)))
+        metrics[2].metric("Metode", "TF-IDF + K-Means")
+
+        # Tema awal berbasis kata dominan; perlu diverifikasi dengan contoh teks.
+        def tema_otomatis(cid, words):
+            gabung = " ".join(w for w, _ in words).lower()
+            if any(k in gabung for k in ["umr", "gaji", "biaya hidup", "upah"]):
+                return "Diskusi Gaji, UMR, dan Biaya Hidup"
+            if any(k in gabung for k in ["lowongan", "posisi", "rekrutmen", "pt", "lamaran"]):
+                return "Informasi Lowongan Kerja dan Rekrutmen"
+            if any(k in gabung for k in ["fresh graduate", "pengalaman", "lulusan", "sarjana"]):
+                return "Tantangan Fresh Graduate dan Pengalaman Kerja"
+            return f"Tema Cluster {cid} (perlu ditinjau)"
+
+        tema_map = {cid: tema_otomatis(cid, top_words_map.get(cid, [])) for cid in cluster_ids}
+        # Distribusi jumlah dan persentase cluster.
         st.markdown("---")
+        st.subheader("Distribusi Anggota Cluster")
+        distribusi = pd.DataFrame({
+            "Cluster": [f"Cluster {cid}" for cid in cluster_counts.index],
+            "Jumlah postingan": cluster_counts.values,
+            "Persentase (%)": (cluster_counts.values / total_cluster * 100).round(2)
+        })
+        col_chart, col_table = st.columns([1.6, 1])
+        with col_chart:
+            fig, ax = plt.subplots(figsize=(8, 4.5))
+            bars = ax.bar(distribusi["Cluster"], distribusi["Jumlah postingan"])
+            ax.set_ylabel("Jumlah postingan")
+            ax.set_title("Jumlah Postingan per Cluster")
+            ax.grid(axis="y", linestyle=":", alpha=0.35)
+            for bar, pct in zip(bars, distribusi["Persentase (%)"]):
+                ax.annotate(f"{int(bar.get_height())}\n({pct:.1f}%)",
+                            (bar.get_x() + bar.get_width()/2, bar.get_height()),
+                            ha="center", va="bottom", fontsize=9)
+            fig.tight_layout()
+            st.pyplot(fig, clear_figure=True)
+            plt.close(fig)
+        with col_table:
+            st.dataframe(distribusi, width="stretch", hide_index=True)
 
-    st.subheader("💡 Penjelasan & Perbedaan Cluster")
-    st.markdown("""
-- **Perbedaan Ketiga Cluster:** Cluster 0 (190 postingan) berisi pengumuman lowongan kerja, Cluster 1 (96 postingan) fokus pada keluh kesah *fresh graduate* terkait syarat pengalaman kerja, dan Cluster 2 (230 postingan) berisi obrolan tentang besaran gaji UMR dan biaya hidup.
-- **Tumpang Tindih (Overlap):** Masih terdapat tumpang tindih pada kata umum seperti `kerja`, `gaji`, dan `umr` karena informasi lowongan kerja maupun keluhan pekerja sama-sama sering menyebutkan istilah tersebut.
-    """)
+        # Silhouette score menggunakan cosine; hanya dihitung bila data dan cluster memadai.
+        try:
+            if len(df_cluster) > len(cluster_ids) and len(cluster_ids) > 1 and len(df_cluster) <= 5000:
+                score = silhouette_score(X_tfidf, df_cluster["cluster"], metric="cosine")
+                st.metric("Silhouette Score (cosine)", f"{score:.3f}")
+                st.caption("Nilai silhouette mendekati 1 menunjukkan pemisahan lebih baik dan nilai dekat 0 menandakan kelompok saling berdekatan.")
+        except Exception:
+            pass
 
+        # Visualisasi 2D menggunakan TruncatedSVD agar cocok untuk matriks TF-IDF sparse.
+        st.markdown("---")
+        st.subheader("Peta Sebaran Postingan (TF-IDF → 2D)")
+        if X_tfidf.shape[0] >= 3 and X_tfidf.shape[1] >= 2:
+            try:
+                svd = TruncatedSVD(n_components=2, random_state=42)
+                koordinat = svd.fit_transform(X_tfidf)
+                fig, ax = plt.subplots(figsize=(9, 5.5))
+                for cid in cluster_ids:
+                    mask = df_cluster["cluster"].to_numpy() == cid
+                    ax.scatter(koordinat[mask, 0], koordinat[mask, 1], alpha=0.65, s=35, label=f"Cluster {cid}")
+                ax.set_xlabel("Komponen 1")
+                ax.set_ylabel("Komponen 2")
+                ax.set_title("Sebaran Dokumen Berdasarkan Kemiripan Teks")
+                ax.legend()
+                ax.grid(linestyle=":", alpha=0.25)
+                fig.tight_layout()
+                st.pyplot(fig, clear_figure=True)
+                plt.close(fig)
+                st.caption("Peta 2D adalah proyeksi untuk membantu membaca pola; titik yang berdekatan cenderung memiliki representasi teks lebih mirip, tetapi visualisasi ini bukan bukti mutlak pemisahan topik.")
+            except Exception as e:
+                st.warning(f"Visualisasi 2D tidak dapat dibuat: {e}")
+
+        # WordCloud: gunakan seluruh kosakata berbobot TF-IDF per cluster,
+        # bukan hanya 10 kata teratas, agar visualisasi lebih penuh dan informatif.
+        st.markdown("---")
+        st.subheader("WordCloud Tiap Cluster")
+        st.caption("Ukuran kata menggambarkan bobot relatif kata dalam cluster")
+        cols_wc = st.columns(min(3, len(cluster_ids)))
+        for idx, cid in enumerate(cluster_ids):
+            with cols_wc[idx % len(cols_wc)]:
+                positions_wc = np.flatnonzero(df_cluster["cluster"].to_numpy() == cid)
+                if len(positions_wc) > 0:
+                    mean_scores_wc = np.asarray(X_tfidf[positions_wc].mean(axis=0)).ravel()
+                    frekuensi = {
+                        terms[i]: float(mean_scores_wc[i])
+                        for i in range(len(terms))
+                        if mean_scores_wc[i] > 0
+                    }
+                else:
+                    frekuensi = {}
+
+                st.markdown(f"**Cluster {cid} — {tema_map.get(cid, 'Tema belum ditentukan')}**")
+                if frekuensi:
+                    wc = WordCloud(
+                        width=1000,
+                        height=600,
+                        background_color="white",
+                        colormap="viridis",
+                        max_words=60,
+                        min_font_size=9,
+                        max_font_size=100,
+                        margin=3,
+                        prefer_horizontal=0.9,
+                        relative_scaling=0.45,
+                        collocations=False,
+                        random_state=42,
+                    ).generate_from_frequencies(frekuensi)
+                    fig, ax = plt.subplots(figsize=(8, 4.8))
+                    ax.imshow(wc, interpolation="bilinear")
+                    ax.axis("off")
+                    fig.tight_layout(pad=0)
+                    st.pyplot(fig, clear_figure=True, width="stretch")
+                    plt.close(fig)
+                else:
+                    st.caption("Kata dominan belum tersedia.")
+
+        # Detail cluster: jumlah, kata dominan, dan 3 contoh postingan asli.
+        st.markdown("---")
+        st.subheader("Detail dan Interpretasi Setiap Cluster")
+        for cid in cluster_ids:
+            df_c = df_cluster[df_cluster["cluster"] == cid]
+            words = top_words_map.get(cid, [])
+            tema = tema_map.get(cid, f"Tema Cluster {cid}")
+            with st.expander(f"Cluster {cid} — {tema} ({len(df_c)} postingan)", expanded=True):
+                st.write(f"**Jumlah:** {len(df_c):,} postingan ({len(df_c)/total_cluster*100:.1f}%).")
+                st.write("**Lima kata/frasa dominan:** " + (", ".join(w for w, _ in words[:5]) if words else "Belum tersedia"))
+                st.write("**Contoh postingan:**")
+                kolom_contoh = "text" if "text" in df_c.columns else kolom_teks_model
+                for nomor, (_, baris) in enumerate(df_c[kolom_contoh].dropna().drop_duplicates().head(3).items(), start=1):
+                    st.info(f"Contoh {nomor}: {baris}")
+
+        st.markdown("---")
+        st.subheader("💡 Perbedaan Cluster dan Tumpang Tindih")
+        st.markdown("""
+        **Perbedaan isi ketiga cluster**
+
+        - **Cluster 0 — Gaji dan UMR:** lebih menonjolkan pembahasan gaji, UMR, serta lowongan kerja. Cluster ini dapat memuat diskusi tentang besaran upah dan kesesuaian gaji dengan kebutuhan pencari kerja.
+        - **Cluster 1 — Informasi lowongan dan rekrutmen:** lebih banyak menonjolkan kata seperti *lowongan kerja*, *posisi*, dan *PT*, sehingga cenderung berisi informasi atau pengumuman rekrutmen.
+        - **Cluster 2 — Fresh graduate dan pengalaman:** menonjolkan kata *fresh graduate*, *pengalaman*, dan *kerja*. Cluster ini cenderung berkaitan dengan pengalaman atau persyaratan bagi pencari kerja yang baru lulus.
+
+        **Tumpang tindih antarkluster**
+
+        Terdapat indikasi tumpang tindih terutama antara **Cluster 0 dan Cluster 2**. Pembahasan gaji/lowongan kerja dapat muncul bersamaan dengan pengalaman dan kesulitan fresh graduate mencari pekerjaan. Cluster 1 juga dapat bersinggungan dengan keduanya karena unggahan lowongan kerja bisa mencantumkan gaji maupun syarat pengalaman. Dengan demikian, batas topik antarkluster belum
+        sepenuhnya tegas.
+
+        **Catatan interpretasi:** tema di atas merupakan interpretasi awal dari kata dominan dan contoh postingan, bukan label yang ditentukan langsung oleh algoritma. K-Means mengelompokkan teks berdasarkan kemiripan fitur TF-IDF, bukan berdasarkan tema yang sudah diketahui. Jika contoh postingan dalam suatu cluster ternyata beragam atau tidak konsisten, hasil tersebut perlu dilaporkan sebagai cluster yang temanya belum jelas—tidak perlu memaksakan interpretasi atau mencari jumlah cluster terbaik.
+        """)
+        with st.expander("Lihat data clustering yang digunakan"):
+            cols_show = [c for c in ["text", "Cleaned_Text", "cluster"] if c in df_cluster.columns]
+            st.dataframe(df_cluster[cols_show], width="stretch", hide_index=True)
 # ===================================================================
 # TAB 4: REGRESI (EVALUASI & FORMULIR INTERAKTIF)
 with tab4:
@@ -260,6 +484,12 @@ with tab4:
     
     # 1. Konversi tipe data ke numerik (Target y + Fitur X)
     df['like_count_num'] = pd.to_numeric(df['like_count'], errors='coerce')
+    # Jika kolom interaksi tidak tersedia pada CSV, isi NaN agar aplikasi tidak langsung crash.
+    if 'reply_count' not in df.columns:
+        df['reply_count'] = np.nan
+    if 'retweet_count' not in df.columns:
+        df['retweet_count'] = np.nan
+
     df['reply_count_num'] = pd.to_numeric(df['reply_count'], errors='coerce')
     df['retweet_count_num'] = pd.to_numeric(df['retweet_count'], errors='coerce')
     
