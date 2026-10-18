@@ -216,57 +216,37 @@ with tab3:
     st.header("🏷️ Analisis Clustering Percakapan Dunia Kerja")
     st.caption("Pengelompokan teks menggunakan TF-IDF dan K-Means dengan 3 cluster.")
 
-    uploaded_cluster = st.file_uploader(
-        "Opsional: unggah kerja_clustering.csv agar label cluster sama dengan hasil Colab",
-        type=["csv"],
-        key="upload_kerja_clustering"
-    )
+    # Validasi khusus clustering agar pesan kesalahan jelas.
+    kolom_wajib_cluster = ["text", "Cleaned_Text"]
+    kolom_cluster_tidak_ada = [kol for kol in kolom_wajib_cluster if kol not in df.columns]
+    if kolom_cluster_tidak_ada:
+        st.error(
+            "Clustering tidak dapat dijalankan karena kolom wajib berikut tidak tersedia: "
+            + ", ".join(kolom_cluster_tidak_ada)
+            + ". Pastikan dataset utama memiliki kolom text dan Cleaned_Text."
+        )
+        st.stop()
 
-    # Salinan khusus untuk clustering agar bagian tab lain tidak berubah.
+    # Clustering menggunakan dataset utama yang sudah diunggah melalui sidebar.
+    # Tidak perlu mengunggah file clustering terpisah.
     df_cluster = df.copy()
     pakai_label_colab = False
-
-    if uploaded_cluster is not None:
-        try:
-            df_colab = pd.read_csv(uploaded_cluster)
-            kolom_teks_cluster = next(
-                (c for c in ["text", "full_text", "teks_asli"] if c in df_colab.columns),
-                None
-            )
-            kolom_label_cluster = next(
-                (c for c in ["cluster", "Cluster"] if c in df_colab.columns),
-                None
-            )
-            if kolom_teks_cluster is None or kolom_label_cluster is None:
-                st.warning("File clustering harus memiliki kolom teks (text/full_text) dan cluster.")
-            else:
-                # Normalisasi teks untuk pencocokan yang lebih tahan terhadap spasi dan kapitalisasi.
-                df_cluster["_key_cluster"] = df_cluster["text"].fillna("").astype(str).str.strip().str.lower()
-                df_colab["_key_cluster"] = df_colab[kolom_teks_cluster].fillna("").astype(str).str.strip().str.lower()
-                label_map = (df_colab.drop_duplicates("_key_cluster")
-                             .set_index("_key_cluster")[kolom_label_cluster].to_dict())
-                label_terpasang = df_cluster["_key_cluster"].map(label_map)
-                jumlah_cocok = int(label_terpasang.notna().sum())
-                if jumlah_cocok > 0:
-                    df_cluster["cluster"] = label_terpasang
-                    df_cluster["cluster"] = pd.to_numeric(df_cluster["cluster"], errors="coerce")
-                    df_cluster = df_cluster[df_cluster["cluster"].notna()].copy()
-                    df_cluster["cluster"] = df_cluster["cluster"].astype(int)
-                    pakai_label_colab = True
-                    st.success(f"Label cluster dari Colab berhasil dicocokkan untuk {jumlah_cocok} postingan.")
-                    if jumlah_cocok < len(df):
-                        st.info(f"{len(df) - jumlah_cocok} postingan tidak memiliki pasangan teks di file clustering dan tidak disertakan pada visualisasi ini.")
-                else:
-                    st.warning("Tidak ada teks yang cocok antara dataset utama dan file clustering. K-Means akan dihitung ulang untuk tab ini.")
-        except Exception as e:
-            st.warning(f"File clustering gagal dibaca ({e}). K-Means akan dihitung ulang untuk tab ini.")
+    jumlah_awal_cluster = len(df_cluster)
 
     # Teks yang digunakan: prioritaskan Cleaned_Text; fallback ke teks asli.
     kolom_teks_model = "Cleaned_Text" if "Cleaned_Text" in df_cluster.columns else "text"
     teks_model = df_cluster[kolom_teks_model].fillna("").astype(str).str.strip()
     valid_teks = teks_model.ne("")
+    jumlah_teks_kosong_cluster = int((~valid_teks).sum())
     df_cluster = df_cluster.loc[valid_teks].copy()
     teks_model = teks_model.loc[valid_teks]
+
+    st.caption(
+        f"Dataset utama: {jumlah_awal_cluster:,} baris. "
+        f"Baris yang dikeluarkan dari clustering: {jumlah_teks_kosong_cluster:,} "
+        "karena kolom Cleaned_Text kosong atau hanya berisi spasi. "
+        f"Baris yang dianalisis: {len(df_cluster):,}."
+    )
 
     if len(df_cluster) < 3:
         st.warning("Data teks valid terlalu sedikit untuk menjalankan clustering. Periksa file CSV yang diunggah.")
@@ -293,7 +273,7 @@ with tab3:
         if not pakai_label_colab:
             model_kmeans = KMeans(n_clusters=3, init="k-means++", max_iter=300, n_init=10, random_state=42)
             df_cluster["cluster"] = model_kmeans.fit_predict(X_tfidf)
-            st.info("K-Means dihitung di Streamlit. Untuk mempertahankan label persis dari Colab, unggah kerja_clustering.csv.")
+            st.info("K-Means dihitung langsung dari kolom Cleaned_Text pada dataset utama.")
 
         # Pastikan label numerik dan tampilkan hanya cluster yang benar-benar ada.
         df_cluster["cluster"] = pd.to_numeric(df_cluster["cluster"], errors="coerce")
@@ -403,7 +383,7 @@ with tab3:
         # bukan hanya 10 kata teratas, agar visualisasi lebih penuh dan informatif.
         st.markdown("---")
         st.subheader("WordCloud Tiap Cluster")
-        st.caption("Ukuran kata menggambarkan bobot relatif kata dalam cluster")
+        st.caption("Ukuran kata menggambarkan bobot relatif kata dalam cluster. Kata dominan perlu dibaca bersama contoh postingan.")
         cols_wc = st.columns(min(3, len(cluster_ids)))
         for idx, cid in enumerate(cluster_ids):
             with cols_wc[idx % len(cols_wc)]:
@@ -461,11 +441,9 @@ with tab3:
         st.markdown("---")
         st.subheader("💡 Perbedaan Cluster dan Tumpang Tindih")
         st.markdown("""
-        **Perbedaan isi ketiga cluster**
+        **Perbedaan isi cluster**
 
-        - **Cluster 0 — Gaji dan UMR:** lebih menonjolkan pembahasan gaji, UMR, serta lowongan kerja. Cluster ini dapat memuat diskusi tentang besaran upah dan kesesuaian gaji dengan kebutuhan pencari kerja.
-        - **Cluster 1 — Informasi lowongan dan rekrutmen:** lebih banyak menonjolkan kata seperti *lowongan kerja*, *posisi*, dan *PT*, sehingga cenderung berisi informasi atau pengumuman rekrutmen.
-        - **Cluster 2 — Fresh graduate dan pengalaman:** menonjolkan kata *fresh graduate*, *pengalaman*, dan *kerja*. Cluster ini cenderung berkaitan dengan pengalaman atau persyaratan bagi pencari kerja yang baru lulus.
+        Tema setiap cluster ditampilkan pada judul, kata dominan, dan contoh postingan di atas. Nomor cluster tidak selalu memiliki tema yang sama setiap kali model dihitung ulang, sehingga interpretasi harus mengikuti hasil aktual, bukan menganggap Cluster 0, 1, atau 2 selalu mewakili topik tertentu.
 
         **Tumpang tindih antarkluster**
 
@@ -474,6 +452,48 @@ with tab3:
 
         **Catatan interpretasi:** tema di atas merupakan interpretasi awal dari kata dominan dan contoh postingan, bukan label yang ditentukan langsung oleh algoritma. K-Means mengelompokkan teks berdasarkan kemiripan fitur TF-IDF, bukan berdasarkan tema yang sudah diketahui. Jika contoh postingan dalam suatu cluster ternyata beragam atau tidak konsisten, hasil tersebut perlu dilaporkan sebagai cluster yang temanya belum jelas—tidak perlu memaksakan interpretasi atau mencari jumlah cluster terbaik.
         """)
+        # Ringkasan temuan dibuat dari hasil clustering yang sedang dihitung.
+        st.markdown("---")
+        st.subheader("Temuan Utama")
+
+        cluster_terbesar = int(cluster_counts.idxmax())
+        cluster_terkecil = int(cluster_counts.idxmin())
+        jumlah_terbesar = int(cluster_counts.max())
+        jumlah_terkecil = int(cluster_counts.min())
+        persen_terbesar = jumlah_terbesar / total_cluster * 100
+        persen_terkecil = jumlah_terkecil / total_cluster * 100
+        kata_terbesar = [kata for kata, _ in top_words_map.get(cluster_terbesar, [])[:5]]
+        kata_terbesar_text = ", ".join(kata_terbesar) if kata_terbesar else "belum tersedia"
+
+        st.markdown(
+            f"1. **Cluster dengan anggota terbanyak:** Cluster {cluster_terbesar} "
+            f"({tema_map.get(cluster_terbesar, 'tema belum ditentukan')}) berisi "
+            f"{jumlah_terbesar:,} postingan atau {persen_terbesar:.1f}% dari data yang berhasil dikelompokkan."
+        )
+        st.markdown(
+            f"2. **Kata dominan pada cluster terbesar:** kata yang paling menonjol adalah "
+            f"{kata_terbesar_text}. Kata-kata ini menjadi petunjuk awal untuk memahami topik cluster, "
+            f"dan perlu dibaca bersama contoh postingan."
+        )
+        st.markdown(
+            f"3. **Sebaran anggota cluster:** cluster dengan anggota paling sedikit adalah Cluster {cluster_terkecil} "
+            f"({tema_map.get(cluster_terkecil, 'tema belum ditentukan')}), sebanyak "
+            f"{jumlah_terkecil:,} postingan atau {persen_terkecil:.1f}%. Perbedaan jumlah ini menunjukkan "
+            f"bahwa data tidak terbagi rata ke setiap kelompok."
+        )
+
+        st.subheader("Keterbatasan Data dan Metode")
+        st.markdown(
+            "1. **Keterbatasan data:** analisis hanya mewakili postingan yang terkumpul dalam dataset utama. "
+            "Postingan dengan `Cleaned_Text` kosong tidak dapat dikelompokkan dan dikeluarkan dari proses clustering. "
+            "Karena itu, hasil belum tentu mewakili seluruh percakapan pengguna X mengenai dunia kerja."
+        )
+        st.markdown(
+            "2. **Keterbatasan metode:** TF-IDF dan K-Means mengelompokkan teks berdasarkan kemiripan fitur kata, "
+            "bukan memahami konteks secara penuh. Penamaan tema dibuat berdasarkan kata dominan dan contoh postingan, "
+            "sehingga tetap memerlukan pemeriksaan manual dan tidak boleh dianggap sebagai label yang pasti."
+        )
+
         with st.expander("Lihat data clustering yang digunakan"):
             cols_show = [c for c in ["text", "Cleaned_Text", "cluster"] if c in df_cluster.columns]
             st.dataframe(df_cluster[cols_show], width="stretch", hide_index=True)
