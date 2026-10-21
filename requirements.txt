@@ -15,6 +15,9 @@ scikit-learn
 # Visualisasi teks
 wordcloud
 
+# Pemrosesan bahasa alami (NLP)
+nltk
+
 # Membaca file Excel (.xlsx)
 openpyxl
 xlrd
