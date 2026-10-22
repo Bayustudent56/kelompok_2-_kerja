@@ -91,6 +91,10 @@ Tab Regresi Linear  ◄──  Tab Clustering  ◄──  Tab Sentimen & Evaluas
 - `scikit-learn==1.6.1`: Algoritma TF-IDF, K-Means, dan Regresi Linear.
 - `matplotlib==3.10.0` & `seaborn`: Pembuatan grafik distribusi sentimen dan plot regresi.
 - `openpyxl==3.1.5`: Membaca file Excel (`.xlsx`) pada fitur evaluasi sentimen manual.
+- `seaborn==0.13.2`
+- `wordcloud==1.9.6`
+- `nltk==3.9.1`
+- `xlrd==2.0.2`
 
 ---
 
