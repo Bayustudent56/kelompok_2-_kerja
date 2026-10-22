@@ -3,10 +3,10 @@
 Proyek **Tugas Kelompok 2** yang menganalisis percakapan di X (Twitter) seputar dunia kerja di Indonesia, khususnya topik **gaji UMR, lowongan kerja, dan fresh graduate**. 
 
 Proyek ini terbagi menjadi dua lingkungan eksekusi utama:
-1. **Google Colab Notebook (`Tugas_Kelompok_2.ipynb`)**: Digunakan untuk proses *crawling* data dari X, penggabungan data (*merging*), pembersihan teks (*cleaning*), *clustering* topik (K-Means), dan klasifikasi sentimen menggunakan model *pre-trained* IndoBERT.
+1. **Google Colab Notebook (`Notebook_Tugas_Kelompok_2.ipynb`)**: Digunakan untuk proses *crawling* data dari X, penggabungan data (*merging*), pembersihan teks (*cleaning*), *clustering* topik (K-Means), dan klasifikasi sentimen menggunakan model *pre-trained* IndoBERT.
 2. **Dashboard Web Interaktif (`app.py`)**: Aplikasi berbasis **Streamlit** yang dijalankan secara lokal untuk menampilkan visualisasi data, evaluasi sentimen manual, hasil *clustering*, serta pemodelan dan kalkulator **Regresi Linear** untuk memprediksi jumlah *likes*.
 
-> ⚠️ **Catatan Penting:** File notebook (`Tugas_Kelompok_2.ipynb`) berisi *magic command* khusus Linux/Colab (`!pip`, `!sudo apt-get`, `!npx`, dsb.) sehingga **wajib dijalankan di Google Colab**, sedangkan file `app.py` dijalankan menggunakan perintah `streamlit run app.py`.
+> ⚠️ **Catatan Penting:** File notebook (`Notebook_Tugas_Kelompok_2.ipynb`) berisi *magic command* khusus Linux/Colab (`!pip`, `!sudo apt-get`, `!npx`, dsb.) sehingga **wajib dijalankan di Google Colab**, sedangkan file `app.py` dijalankan menggunakan perintah `streamlit run app.py`.
 
 ---
 
@@ -32,7 +32,7 @@ Proyek ini terbagi menjadi dua lingkungan eksekusi utama:
 |---|---|
 | **Sumber Data** | Postingan di X (Twitter) |
 | **Kata Kunci Pencarian** | `gaji UMR OR lowongan kerja OR fresh graduate` |
-| **Rentang Waktu** | 1 Januari 2026 sampai 10 Oktober 2026 |
+| **Rentang Waktu** | 21 Oktober 2014 sampai 12 Oktober 2026 |
 | **Bahasa Data** | Indonesia (`in` / `id`) |
 | **Alat Crawling** | [`tweet-harvest` (v2.7.1)](https://github.com/helmisatria/tweet-harvest) |
 | **Platform Pengolahan** | Google Colab (Python 3 & Node.js 20) |
@@ -64,7 +64,7 @@ Tab Regresi Linear  ◄──  Tab Clustering  ◄──  Tab Sentimen & Evaluas
 ## 📂 Struktur File Proyek
 
 ```text
-├── Tugas_Kelompok_2.ipynb          # Notebook Google Colab untuk crawling hingga analisis sentimen
+├── Notebook_Tugas_Kelompok_2.ipynb          # Notebook Google Colab untuk crawling hingga analisis sentimen
 ├── app.py                          # Aplikasi utama dashboard web interaktif berbasis Streamlit
 ├── requirements.txt                # Daftar paket Python untuk menjalankan aplikasi Streamlit
 ├── dataset/                        # (Opsional) Folder lokal untuk file evaluasi sentimen manual
@@ -76,7 +76,7 @@ Tab Regresi Linear  ◄──  Tab Clustering  ◄──  Tab Sentimen & Evaluas
 
 ## 🛠️ Teknologi dan Pustaka yang Digunakan
 
-### Lingkungan Google Colab (`Tugas_Kelompok_2.ipynb`)
+### Lingkungan Google Colab (`Notebook_Tugas_Kelompok_2.ipynb`)
 - **Node.js 20** & **`tweet-harvest`**: Pengambilan data cuitan X berbasis Chromium.
 - **pandas** & **NumPy**: Pengolahan tabel DataFrame dan komputasi numerik.
 - **NLTK**: Penghapusan *stopwords* bahasa Indonesia dan bahasa Inggris.
